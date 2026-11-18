@@ -54,6 +54,11 @@ class DataAnalyzer:
         n, rows, cols = np.frombuffer(raw, dtype=">i4", count=3, offset=4)
         return np.frombuffer(raw, dtype=np.uint8, offset=16).reshape(n, rows, cols)
 
+    def handle_missing_values(self, target_col="description", group_col="stock_code", strategy="mode"):
+        known = self.df.dropna(subset=[target_col]).groupby(group_col)[target_col]
+        fill = known.agg(lambda s: s.mode().iloc[0]) if strategy == "mode" else known.agg(strategy)
+        self.df[target_col] = self.df[target_col].fillna(self.df[group_col].map(fill))
+
     def add_image_features(self):
         # 상품과 이미지의 연결은 난수(시드 고정)로 정한 학습용 시뮬레이션이다
         codes = self.df["stock_code"].unique()
