@@ -85,3 +85,17 @@ class DataAnalyzer:
         self.df = df
 
     
+    def _iqr_bounds(self, column, threshold):
+        q1, q3 = self.df[column].quantile([0.25, 0.75])
+        iqr = q3 - q1
+        return q1 - threshold * iqr, q3 + threshold * iqr
+
+    def detect_outliers(self, column, threshold=1.5):
+        lower, upper = self._iqr_bounds(column, threshold)
+        return self.df[(self.df[column] < lower) | (self.df[column] > upper)]
+
+    def clip_outliers(self, column, threshold=1.5):
+        lower, upper = self._iqr_bounds(column, threshold)
+        self.df[f"{column}_clipped"] = self.df[column].clip(lower, upper)
+
+    
