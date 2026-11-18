@@ -97,5 +97,36 @@ class DataAnalyzer:
     def clip_outliers(self, column, threshold=1.5):
         lower, upper = self._iqr_bounds(column, threshold)
         self.df[f"{column}_clipped"] = self.df[column].clip(lower, upper)
+    # RFM의 Monetary(금액)은 원본 amount로 계산 하는데 VIP는 원래 대량 구매 고객, VIP와 일반 고객 차이의 경계가 모호해짐
+
+    @staticmethod
+    # RFM 점수 계산: 1~5점으로 나누어 점수
+    # Recency는 최근 구매일이 가까울수록 점수가 높음, Frequency와 Monetary는 값이 클수록 점수가 높음
+    def _score(s):
+        cuts = s.quantile([0.2, 0.4, 0.6, 0.8]).to_numpy()
+        return np.searchsorted(cuts, s.to_numpy()) + 1
+
+    def calculate_rfm(self, customer_col="customer_id", date_col="order_date",
+                      amount_col="amount", invoice_col="invoice"):
+        last_day = self.df[date_col].max()
+        df = self.df.dropna(subset=[customer_col])
+        rfm = df.groupby(customer_col).agg(
+            last_order=(date_col, "max"),
+            frequency=(invoice_col, "nunique"),
+            monetary=(amount_col, "sum"),
+        )
+        rfm["recency"] = (last_day - rfm.pop("last_order")).dt.days
+
+        rfm["R"] = 6 - self._score(rfm["recency"])
+        rfm["F"] = self._score(rfm["frequency"])
+        rfm["M"] = self._score(rfm["monetary"])
+
+        r, f, m = rfm["R"], rfm["F"], rfm["M"]
+        rfm["segment"] = np.select(
+            [(r >= 4) & (f >= 4) & (m >= 4), (f >= 4) & (r >= 3), (r >= 4) & (f <= 2), r <= 2],
+            ["VIP", "Loyal", "New", "Churned"],
+            default="Regular",
+        )
+        return rfm
 
     
